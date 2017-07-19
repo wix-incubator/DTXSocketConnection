@@ -14,7 +14,6 @@
 
 @implementation DTXSocketConnection
 {
-	dispatch_queue_t _workQueue;
 	NSInputStream* _inputStream;
 	NSOutputStream* _outputStream;
 	
@@ -367,7 +366,7 @@
 	}];
 }
 
-- (void)writeData:(NSData *)data withCompletionHandler:(void (^)(NSError * _Nullable))completionHandler
+- (void)writeData:(NSData *)data completionHandler:(void (^)(NSError * _Nullable))completionHandler
 {
 	dispatch_async(_workQueue, ^{
 		BOOL writesPending = _pendingWrites.count > 0;

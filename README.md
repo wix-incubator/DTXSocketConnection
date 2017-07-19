@@ -56,7 +56,7 @@ Import the framework's umbrella header:
 ```objc
 NSString* str = [NSString stringWithFormat:@"The time is: %@", [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterShortStyle timeStyle:NSDateFormatterShortStyle]];
 NSData* data = [str dataUsingEncoding:NSUTF8StringEncoding];
-[_socketConnection writeData:data withCompletionHandler:^(NSError * _Nullable error) {	
+[_socketConnection writeData:data completionHandler:^(NSError * _Nullable error) {	
 	if(error)
 	{
 		NSLog(@"Write error: %@", error);
