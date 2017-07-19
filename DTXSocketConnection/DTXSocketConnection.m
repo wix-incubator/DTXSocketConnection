@@ -1,6 +1,6 @@
 //
 //  DTXSocketConnection.m
-//  MyCoolNetworkServer
+//  DTXSocketConnection
 //
 //  Created by Leo Natan (Wix) on 18/07/2017.
 //  Copyright © 2017 LeoNatan. All rights reserved.
