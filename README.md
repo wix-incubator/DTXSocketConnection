@@ -11,30 +11,35 @@ Import the framework's umbrella header:
 
 ```objc
 #import <DTXSocketConnection/DTXSocketConnection.h>
+```
 
-…
+#### Opening Connection
 
-//Server
+##### Server
+
+```objc
 - (void)netService:(NSNetService *)sender didAcceptConnectionWithInputStream:(NSInputStream *)inputStream outputStream:(NSOutputStream *)outputStream
 {
 	_socketConnection = [[DTXSocketConnection alloc] initWithInputStream:inputStream outputStream:outputStream queue:_socketQueue];
 	_socketConnection.delegate = self;
 	[_socketConnection open];
 }
+```
 
-…
+##### Client
 
-//Client
+```objc
 - (void)netServiceDidResolveAddress:(NSNetService *)sender
 {
 	_socketConnection = [[DTXSocketConnection alloc] initWithHostName:sender.hostName port:sender.port queue:_socketQueue];
 	_socketConnection.delegate = self;
 	[_socketConnection open];
 }
+```
 
-…
+#### Reading Data
 
-//Reading Data
+```objc
 [_socketConnection readDataWithCompletionHandler:^(NSData * _Nullable data, NSError * _Nullable error) {
 	if(error)
 	{
@@ -44,10 +49,11 @@ Import the framework's umbrella header:
 		
 	NSLog(@"Read data: %@", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
 }];
+```
 
-…
+#### Writing Data
 
-//Writing Data
+```objc
 NSString* str = [NSString stringWithFormat:@"The time is: %@", [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterShortStyle timeStyle:NSDateFormatterShortStyle]];
 NSData* data = [str dataUsingEncoding:NSUTF8StringEncoding];
 [_socketConnection writeData:data withCompletionHandler:^(NSError * _Nullable error) {	
