@@ -44,7 +44,7 @@
 	
 	if(self)
 	{
-		_workQueue = queue ?: dispatch_get_main_queue();
+		_workQueue = queue ?: dispatch_queue_create("com.wix.DTXSocketConnectionQueue", DISPATCH_QUEUE_SERIAL);
 		_inputStream = inputStream;
 		_outputStream = outputStream;
 		
@@ -66,6 +66,7 @@
 		CFWriteStreamRef writeStream;
 		CFStreamCreatePairWithSocketToHost(NULL, (__bridge CFStringRef)hostName, (UInt32)port, &readStream, &writeStream);
 		
+		_workQueue = queue ?: dispatch_queue_create("com.wix.DTXSocketConnectionQueue", DISPATCH_QUEUE_SERIAL);
 		_inputStream = CFBridgingRelease(readStream);
 		_outputStream = CFBridgingRelease(writeStream);
 		
@@ -79,6 +80,7 @@
 {
 	_pendingReads = [NSMutableArray new];
 	_pendingWrites = [NSMutableArray new];
+	_outputPendingDatasToBeWritten = [NSMutableArray new];
 }
 
 - (void)open
@@ -137,7 +139,7 @@
 	
 	static uint64_t headerLength = sizeof(uint64_t);
 	uint64_t bytesRemaining = headerLength - _inputCurrentBytesLength;
-	_inputCurrentBytesLength += [_inputStream read:(_inputBytes + _inputCurrentBytesLength) maxLength:bytesRemaining];
+	_inputCurrentBytesLength += [_inputStream read:(_inputBytes + _inputCurrentBytesLength) maxLength:(NSUInteger)bytesRemaining];
 	
 	if(_inputCurrentBytesLength < headerLength)
 	{
@@ -171,7 +173,7 @@
 {
 	if(_inputBytes == NULL)
 	{
-		_inputBytes = malloc(_inputTotalDataLength);
+		_inputBytes = malloc((size_t)_inputTotalDataLength);
 	}
 	
 	if(_inputStream.hasBytesAvailable == NO)
@@ -181,14 +183,14 @@
 	}
 	
 	uint64_t bytesRemaining = _inputTotalDataLength - _inputCurrentBytesLength;
-	_inputCurrentBytesLength += [_inputStream read:(_inputBytes + _inputCurrentBytesLength) maxLength:bytesRemaining];
+	_inputCurrentBytesLength += [_inputStream read:(_inputBytes + _inputCurrentBytesLength) maxLength:(NSUInteger)bytesRemaining];
 	
 	if(_inputCurrentBytesLength < _inputTotalDataLength)
 	{
 		return;
 	}
 	
-	NSData* dataForUser = [NSData dataWithBytesNoCopy:_inputBytes length:_inputTotalDataLength freeWhenDone:YES];
+	NSData* dataForUser = [NSData dataWithBytesNoCopy:_inputBytes length:(NSUInteger)_inputTotalDataLength];
 	void (^pendingTask)(NSData *data, NSError *error) = _pendingReads.firstObject;
 	
 	pendingTask(dataForUser, nil);
@@ -199,7 +201,7 @@
 	_inputTotalDataLength = 0;
 	_inputCurrentBytesLength = 0;
 	_inputWaitingForData = NO;
-
+	
 	if(_pendingReads.count > 0)
 	{
 		_inputWaitingForHeader = YES;
@@ -246,7 +248,7 @@
 			[self _errorOutForReadRequest:completionHandler];
 			return;
 		}
-
+		
 		//TODO: Decide what the correct behavior is, if pending read close.
 		
 		//Queue the pending read request.
@@ -286,7 +288,7 @@
 	static uint64_t headerLength = sizeof(uint64_t);
 	uint64_t bytesRemaining = headerLength - _outputCurrentBytesLength;
 	
-	_outputCurrentBytesLength += [_outputStream write:(_outputData.bytes + _outputCurrentBytesLength) maxLength:bytesRemaining];
+	_outputCurrentBytesLength += [_outputStream write:(_outputData.bytes + _outputCurrentBytesLength) maxLength:(NSUInteger)bytesRemaining];
 	
 	if(_outputCurrentBytesLength < headerLength)
 	{
@@ -294,6 +296,7 @@
 	}
 	
 	_outputWaitingForHeader = NO;
+	_outputCurrentBytesLength = 0;
 	
 	_outputData = _outputPendingDatasToBeWritten.firstObject;
 	[_outputPendingDatasToBeWritten removeObjectAtIndex:0];
@@ -312,7 +315,7 @@
 	}
 	
 	uint64_t bytesRemaining = _outputData.length - _outputCurrentBytesLength;
-	_outputCurrentBytesLength += [_outputStream write:(_outputData.bytes + _outputCurrentBytesLength) maxLength:bytesRemaining];
+	_outputCurrentBytesLength += [_outputStream write:(_outputData.bytes + _outputCurrentBytesLength) maxLength:(NSUInteger)bytesRemaining];
 	
 	if(_outputCurrentBytesLength < _outputData.length)
 	{
