@@ -72,6 +72,7 @@ NS_ASSUME_NONNULL_BEGIN
  * @note This queue must be set at object creation time and may not be changed.
  */
 @property (nonatomic, strong) dispatch_queue_t workQueue;
+
 /**
  * The connection delegate.
  */
@@ -99,7 +100,7 @@ NS_ASSUME_NONNULL_BEGIN
  *
  * @param completionHandler The completion handler to call when data is read, or an error occurs. This handler is executed on the work queue.
  */
-- (void)readDataWithCompletionHandler:(void (^)(NSData* __nullable data, NSError* __nullable error))completionHandler;
+- (void)readDataWithCompletionHandler:(void (^ __nonnull)(NSData* __nullable data, NSError* __nullable error))completionHandler;
 /**
  * Asynchronously writes the specified data to the stream, and calls a handler upon completion.
  *
@@ -108,7 +109,7 @@ NS_ASSUME_NONNULL_BEGIN
  * @param data The data to be written.
  * @param completionHandler The completion handler to call when all bytes are written, or an error occurs. This handler is executed on the work queue.
  */
-- (void)writeData:(NSData*)data completionHandler:(void (^)(NSError* __nullable error))completionHandler;
+- (void)writeData:(NSData*)data completionHandler:(void (^ __nonnull)(NSError* __nullable error))completionHandler;
 
 @end
 

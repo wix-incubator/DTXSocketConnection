@@ -30,9 +30,12 @@
 	NSData* _outputData;
 	uint64_t _outputCurrentBytesLength;
 	BOOL _outputPendingClose;
+	BOOL _outputPendingPing;
 	
 	NSMutableArray<void (^)(NSData *data, NSError *error)>* _pendingReads;
 	NSMutableArray<void (^)(NSError *error)>* _pendingWrites;
+	
+	dispatch_source_t _pingTimer;
 }
 
 - (instancetype)initWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream queue:(nullable dispatch_queue_t)queue
@@ -81,6 +84,28 @@
 	_pendingReads = [NSMutableArray new];
 	_pendingWrites = [NSMutableArray new];
 	_outputPendingDatasToBeWritten = [NSMutableArray new];
+	
+	__block dispatch_source_t pingTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _workQueue);
+	_pingTimer = pingTimer;
+	uint64_t interval = 1 * NSEC_PER_SEC;
+	dispatch_source_set_timer(_pingTimer, dispatch_walltime(NULL, 0), interval, interval / 10);
+	
+	__weak __typeof(self) weakSelf = self;
+	dispatch_source_set_event_handler(_pingTimer, ^ {
+		__strong __typeof(weakSelf) strongSelf = weakSelf;
+		
+		if(strongSelf == nil)
+		{
+			dispatch_cancel(pingTimer);
+			pingTimer = nil;
+			
+			return;
+		}
+		
+		[weakSelf _sendPing];
+	});
+	
+	dispatch_resume(_pingTimer);
 }
 
 - (void)open
@@ -124,6 +149,25 @@
 	});
 }
 
+- (void)_sendPing
+{
+	_outputPendingPing = YES;
+	
+	NSData* pingData = [NSData data];
+	id pingCompletion = ^(NSError * _Nullable error) {
+		_outputPendingPing = NO;
+	};
+	
+	if(_pendingWrites.count == 0)
+	{
+		[self _writeDataNow:pingData completionHandler:pingCompletion];
+		return;
+	}
+	
+	[_pendingWrites addObject:pingCompletion];
+	[_outputPendingDatasToBeWritten addObject:pingData];
+}
+
 - (void)_startReadingHeader
 {
 	if(_inputBytes == NULL)
@@ -158,9 +202,13 @@
 	_inputTotalDataLength = header;
 	_inputWaitingForHeader = NO;
 	
-	//Empty packet
 	if(_inputTotalDataLength == 0)
 	{
+		//Empty packet - ping. Ignore, load next header instead.
+		
+		_inputWaitingForHeader = YES;
+		[self _startReadingHeader];
+		
 		return;
 	}
 	
@@ -238,8 +286,13 @@
 	}];
 }
 
-- (void)readDataWithCompletionHandler:(void (^)(NSData *data, NSError *error))completionHandler
+- (void)readDataWithCompletionHandler:(void (^ _Nonnull)(NSData *data, NSError *error))completionHandler
 {
+	if(completionHandler == nil)
+	{
+		completionHandler = ^ (NSData *data, NSError* error) {};
+	}
+	
 	dispatch_async(_workQueue, ^{
 		BOOL readsPending = _pendingReads.count > 0;
 		
@@ -315,7 +368,10 @@
 	}
 	
 	uint64_t bytesRemaining = _outputData.length - _outputCurrentBytesLength;
-	_outputCurrentBytesLength += [_outputStream write:(_outputData.bytes + _outputCurrentBytesLength) maxLength:(NSUInteger)bytesRemaining];
+	if(bytesRemaining > 0)
+	{
+		_outputCurrentBytesLength += [_outputStream write:(_outputData.bytes + _outputCurrentBytesLength) maxLength:(NSUInteger)bytesRemaining];
+	}
 	
 	if(_outputCurrentBytesLength < _outputData.length)
 	{
@@ -369,38 +425,48 @@
 	}];
 }
 
-- (void)writeData:(NSData *)data completionHandler:(void (^)(NSError * _Nullable))completionHandler
+- (void)_writeDataNow:(NSData*)data completionHandler:(void(^)(NSError* _Nullable))completionHandler
+{
+	if(completionHandler == nil)
+	{
+		completionHandler = ^ (NSError* error) {};
+	}
+	
+	BOOL writesPending = _pendingWrites.count > 0;
+	
+	if(_outputStream.streamStatus >= NSStreamStatusClosed)
+	{
+		[self _errorOutForWriteRequest:completionHandler];
+		return;
+	}
+	
+	//TODO: Decide what the correct behavior is, if pending write close.
+	
+	//Queue the pending write request.
+	[_pendingWrites addObject:completionHandler];
+	[_outputPendingDatasToBeWritten addObject:data];
+	
+	//If there were pending writes, the system should attempt to handle this request in the future.
+	if(writesPending)
+	{
+		return;
+	}
+	
+	[self _prepareHeaderDataForData:data];
+	
+	//Start reading
+	_outputWaitingForHeader = YES;
+	
+	if(_outputStream.streamStatus >= NSStreamStatusOpen)
+	{
+		[self _startWritingHeader];
+	}
+}
+
+- (void)writeData:(NSData *)data completionHandler:(void (^ _Nonnull)(NSError * _Nullable))completionHandler
 {
 	dispatch_async(_workQueue, ^{
-		BOOL writesPending = _pendingWrites.count > 0;
-		
-		if(_outputStream.streamStatus >= NSStreamStatusClosed)
-		{
-			[self _errorOutForWriteRequest:completionHandler];
-			return;
-		}
-		
-		//TODO: Decide what the correct behavior is, if pending write close.
-		
-		//Queue the pending write request.
-		[_pendingWrites addObject:completionHandler];
-		[_outputPendingDatasToBeWritten addObject:data];
-		
-		//If there were pending writes, the system should attempt to handle this request in the future.
-		if(writesPending)
-		{
-			return;
-		}
-		
-		[self _prepareHeaderDataForData:data];
-		
-		//Start reading
-		_outputWaitingForHeader = YES;
-		
-		if(_outputStream.streamStatus >= NSStreamStatusOpen)
-		{
-			[self _startWritingHeader];
-		}
+		[self _writeDataNow:data completionHandler:completionHandler];
 	});
 }
 
@@ -470,6 +536,23 @@
 				break;
 		}
 	}
+}
+
+- (void)dealloc
+{
+	NSInputStream* inputStream = _inputStream;
+	NSOutputStream* outputStream = _outputStream;
+	
+	dispatch_async(_workQueue, ^{
+		if(inputStream.streamStatus < NSStreamStatusClosed)
+		{
+			[inputStream close];
+		}
+		if(outputStream.streamStatus < NSStreamStatusClosed)
+		{
+			[outputStream close];
+		}
+	});
 }
 
 @end
