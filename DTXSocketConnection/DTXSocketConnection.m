@@ -30,12 +30,9 @@
 	NSData* _outputData;
 	uint64_t _outputCurrentBytesLength;
 	BOOL _outputPendingClose;
-	BOOL _outputPendingPing;
 	
 	NSMutableArray<void (^)(NSData *data, NSError *error)>* _pendingReads;
 	NSMutableArray<void (^)(NSError *error)>* _pendingWrites;
-	
-	dispatch_source_t _pingTimer;
 }
 
 - (instancetype)initWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream queue:(nullable dispatch_queue_t)queue
@@ -84,28 +81,6 @@
 	_pendingReads = [NSMutableArray new];
 	_pendingWrites = [NSMutableArray new];
 	_outputPendingDatasToBeWritten = [NSMutableArray new];
-	
-	__block dispatch_source_t pingTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _workQueue);
-	_pingTimer = pingTimer;
-	uint64_t interval = 1 * NSEC_PER_SEC;
-	dispatch_source_set_timer(_pingTimer, dispatch_walltime(NULL, 0), interval, interval / 10);
-	
-	__weak __typeof(self) weakSelf = self;
-	dispatch_source_set_event_handler(_pingTimer, ^ {
-		__strong __typeof(weakSelf) strongSelf = weakSelf;
-		
-		if(strongSelf == nil)
-		{
-			dispatch_cancel(pingTimer);
-			pingTimer = nil;
-			
-			return;
-		}
-		
-		[weakSelf _sendPing];
-	});
-	
-	dispatch_resume(_pingTimer);
 }
 
 - (void)open
@@ -149,25 +124,6 @@
 	});
 }
 
-- (void)_sendPing
-{
-	_outputPendingPing = YES;
-	
-	NSData* pingData = [NSData data];
-	id pingCompletion = ^(NSError * _Nullable error) {
-		_outputPendingPing = NO;
-	};
-	
-	if(_pendingWrites.count == 0)
-	{
-		[self _writeDataNow:pingData completionHandler:pingCompletion];
-		return;
-	}
-	
-	[_pendingWrites addObject:pingCompletion];
-	[_outputPendingDatasToBeWritten addObject:pingData];
-}
-
 - (void)_startReadingHeader
 {
 	if(_inputBytes == NULL)
@@ -204,7 +160,7 @@
 	
 	if(_inputTotalDataLength == 0)
 	{
-		//Empty packet - ping. Ignore, load next header instead.
+		//Empty packet ignore. Load next header instead.
 		
 		_inputWaitingForHeader = YES;
 		[self _startReadingHeader];
@@ -239,6 +195,7 @@
 	}
 	
 	NSData* dataForUser = [NSData dataWithBytesNoCopy:_inputBytes length:(NSUInteger)_inputTotalDataLength];
+	
 	void (^pendingTask)(NSData *data, NSError *error) = _pendingReads.firstObject;
 	
 	pendingTask(dataForUser, nil);
