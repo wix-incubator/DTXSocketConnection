@@ -71,7 +71,7 @@ NS_ASSUME_NONNULL_BEGIN
  *
  * @note This queue must be set at object creation time and may not be changed.
  */
-@property (nonatomic, strong) dispatch_queue_t workQueue;
+@property (nonatomic, strong, readonly) dispatch_queue_t workQueue;
 
 /**
  * The connection delegate.

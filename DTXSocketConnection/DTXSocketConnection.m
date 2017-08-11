@@ -223,7 +223,7 @@
 
 - (void)_errorOutForReadRequest:(void (^)(NSData *data, NSError *error))request
 {
-	if(_inputStream.streamStatus == NSStreamStatusClosed)
+	if(_inputStream.streamStatus == NSStreamStatusClosed || _inputPendingClose)
 	{
 		request(nil, [NSError errorWithDomain:@"DTXSocketConnectionErrorDomain" code:10 userInfo:@{NSLocalizedDescriptionKey: @"Reading is closed."}]);
 		return;
@@ -259,7 +259,11 @@
 			return;
 		}
 		
-		//TODO: Decide what the correct behavior is, if pending read close.
+		if(_inputPendingClose)
+		{
+			[self _errorOutForReadRequest:completionHandler];
+			return;
+		}
 		
 		//Queue the pending read request.
 		[_pendingReads addObject:completionHandler];
@@ -362,7 +366,7 @@
 
 - (void)_errorOutForWriteRequest:(void (^)(NSError* __nullable error))request
 {
-	if(_outputStream.streamStatus == NSStreamStatusClosed)
+	if(_outputStream.streamStatus == NSStreamStatusClosed || _outputPendingClose)
 	{
 		request([NSError errorWithDomain:@"DTXSocketConnectionErrorDomain" code:10 userInfo:@{NSLocalizedDescriptionKey: @"Writing is closed."}]);
 		return;
@@ -397,7 +401,11 @@
 		return;
 	}
 	
-	//TODO: Decide what the correct behavior is, if pending write close.
+	if(_outputPendingClose)
+	{
+		[self _errorOutForWriteRequest:completionHandler];
+		return;
+	}
 	
 	//Queue the pending write request.
 	[_pendingWrites addObject:completionHandler];
@@ -471,7 +479,7 @@
 					[self _startWritingHeader];
 				}
 				break;
-			case NSStreamEventHasBytesAvailable:
+			case NSStreamEventHasSpaceAvailable:
 				if(_outputWaitingForHeader)
 				{
 					[self _startWritingHeader];
