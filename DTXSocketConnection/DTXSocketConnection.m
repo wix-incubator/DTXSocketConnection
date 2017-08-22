@@ -508,6 +508,12 @@
 	NSInputStream* inputStream = _inputStream;
 	NSOutputStream* outputStream = _outputStream;
 	
+	inputStream.delegate = nil;
+	outputStream.delegate = nil;
+	
+	_inputStream = nil;
+	_outputStream = nil;
+	
 	dispatch_async(_workQueue, ^{
 		if(inputStream.streamStatus < NSStreamStatusClosed)
 		{
