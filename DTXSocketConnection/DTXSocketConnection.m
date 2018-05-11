@@ -81,6 +81,8 @@
 	_pendingReads = [NSMutableArray new];
 	_pendingWrites = [NSMutableArray new];
 	_outputPendingDatasToBeWritten = [NSMutableArray new];
+	
+	dispatch_queue_set_specific(_workQueue, (__bridge void*)self, (__bridge void*)self, NULL);
 }
 
 - (void)open
@@ -508,13 +510,10 @@
 	NSInputStream* inputStream = _inputStream;
 	NSOutputStream* outputStream = _outputStream;
 	
-	inputStream.delegate = nil;
-	outputStream.delegate = nil;
-	
-	_inputStream = nil;
-	_outputStream = nil;
-	
-	dispatch_async(_workQueue, ^{
+	void (^block)(void) = ^{
+		inputStream.delegate = nil;
+		outputStream.delegate = nil;
+		
 		if(inputStream.streamStatus < NSStreamStatusClosed)
 		{
 			[inputStream close];
@@ -523,7 +522,21 @@
 		{
 			[outputStream close];
 		}
-	});
+	};
+	
+	if(dispatch_get_specific((__bridge void*)self) == (__bridge void*)self)
+	{
+		block();
+	}
+	else
+	{
+		dispatch_sync(_workQueue, block);
+	}
+	
+	dispatch_queue_set_specific(_workQueue, (__bridge void*)self, NULL, NULL);
+	
+	_inputStream = nil;
+	_outputStream = nil;
 }
 
 @end
