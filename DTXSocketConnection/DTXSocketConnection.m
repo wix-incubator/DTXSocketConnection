@@ -88,41 +88,41 @@
 - (void)open
 {
 	dispatch_async(_workQueue, ^{
-		NSAssert(_inputStream.streamStatus == NSStreamStatusNotOpen && _outputStream.streamStatus == NSStreamStatusNotOpen, @"Streams must not be opened.");
-		CFReadStreamSetDispatchQueue((__bridge CFReadStreamRef)_inputStream, _workQueue);
-		CFWriteStreamSetDispatchQueue((__bridge CFWriteStreamRef)_outputStream, _workQueue);
+		NSAssert(self->_inputStream.streamStatus == NSStreamStatusNotOpen && self->_outputStream.streamStatus == NSStreamStatusNotOpen, @"Streams must not be opened.");
+		CFReadStreamSetDispatchQueue((__bridge CFReadStreamRef)self->_inputStream, self->_workQueue);
+		CFWriteStreamSetDispatchQueue((__bridge CFWriteStreamRef)self->_outputStream, self->_workQueue);
 		
-		_inputStream.delegate = self;
-		_outputStream.delegate = self;
+		self->_inputStream.delegate = self;
+		self->_outputStream.delegate = self;
 		
-		[_inputStream open];
-		[_outputStream open];
+		[self->_inputStream open];
+		[self->_outputStream open];
 	});
 }
 
 - (void)closeRead
 {
 	dispatch_async(_workQueue, ^{
-		if(_pendingReads.count == 0)
+		if(self->_pendingReads.count == 0)
 		{
-			[_inputStream close];
+			[self->_inputStream close];
 			return;
 		}
 		
-		_inputPendingClose = YES;
+		self->_inputPendingClose = YES;
 	});
 }
 
 - (void)closeWrite
 {
 	dispatch_async(_workQueue, ^{
-		if(_pendingWrites.count == 0)
+		if(self->_pendingWrites.count == 0)
 		{
-			[_outputStream close];
+			[self->_outputStream close];
 			return;
 		}
 		
-		_outputPendingClose = YES;
+		self->_outputPendingClose = YES;
 	});
 }
 
@@ -253,22 +253,22 @@
 	}
 	
 	dispatch_async(_workQueue, ^{
-		BOOL readsPending = _pendingReads.count > 0;
+		BOOL readsPending = self->_pendingReads.count > 0;
 		
-		if(_inputStream.streamStatus >= NSStreamStatusClosed)
+		if(self->_inputStream.streamStatus >= NSStreamStatusClosed)
 		{
 			[self _errorOutForReadRequest:completionHandler];
 			return;
 		}
 		
-		if(_inputPendingClose)
+		if(self->_inputPendingClose)
 		{
 			[self _errorOutForReadRequest:completionHandler];
 			return;
 		}
 		
 		//Queue the pending read request.
-		[_pendingReads addObject:completionHandler];
+		[self->_pendingReads addObject:completionHandler];
 		
 		//If there were pending reads, the system should attempt to handle this request in the future.
 		if(readsPending)
@@ -277,9 +277,9 @@
 		}
 		
 		//Start reading
-		_inputWaitingForHeader = YES;
+		self->_inputWaitingForHeader = YES;
 		
-		if(_inputStream.streamStatus >= NSStreamStatusOpen)
+		if(self->_inputStream.streamStatus >= NSStreamStatusOpen)
 		{
 			[self _startReadingHeader];
 		}
