@@ -441,6 +441,8 @@
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode
 {
+	__strong auto strongSelf = self;
+	
 	if(aStream == _inputStream)
 	{
 		switch (eventCode) {
@@ -503,6 +505,8 @@
 				break;
 		}
 	}
+	
+	strongSelf = nil;
 }
 
 - (void)dealloc
