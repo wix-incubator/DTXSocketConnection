@@ -390,11 +390,6 @@
 
 - (void)_writeDataNow:(NSData*)data completionHandler:(void(^)(NSError* _Nullable))completionHandler
 {
-	if(completionHandler == nil)
-	{
-		completionHandler = ^ (NSError* error) {};
-	}
-	
 	BOOL writesPending = _pendingWrites.count > 0;
 	
 	if(_outputStream.streamStatus >= NSStreamStatusClosed)
@@ -432,6 +427,16 @@
 
 - (void)writeData:(NSData *)data completionHandler:(void (^ _Nonnull)(NSError * _Nullable))completionHandler
 {
+	if(data == nil)
+	{
+		return;
+	}
+	
+	if(completionHandler == nil)
+	{
+		completionHandler = ^ (NSError* error) {};
+	}
+	
 	dispatch_async(_workQueue, ^{
 		[self _writeDataNow:data completionHandler:completionHandler];
 	});
