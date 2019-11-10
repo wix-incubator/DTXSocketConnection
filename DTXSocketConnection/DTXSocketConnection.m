@@ -44,7 +44,7 @@
 	
 	if(self)
 	{
-		_workQueue = queue ?: dispatch_queue_create("com.wix.DTXSocketConnectionQueue", DISPATCH_QUEUE_SERIAL);
+		_workQueue = queue ?: dispatch_queue_create("com.wix.DTXSocketConnectionQueue", dispatch_queue_attr_make_with_autorelease_frequency(DISPATCH_QUEUE_SERIAL, DISPATCH_AUTORELEASE_FREQUENCY_WORK_ITEM));
 		_inputStream = inputStream;
 		_outputStream = outputStream;
 		
@@ -66,7 +66,7 @@
 		CFWriteStreamRef writeStream;
 		CFStreamCreatePairWithSocketToHost(NULL, (__bridge CFStringRef)hostName, (UInt32)port, &readStream, &writeStream);
 		
-		_workQueue = queue ?: dispatch_queue_create("com.wix.DTXSocketConnectionQueue", DISPATCH_QUEUE_SERIAL);
+		_workQueue = queue ?: dispatch_queue_create("com.wix.DTXSocketConnectionQueue", dispatch_queue_attr_make_with_autorelease_frequency(DISPATCH_QUEUE_SERIAL, DISPATCH_AUTORELEASE_FREQUENCY_WORK_ITEM));
 		_inputStream = CFBridgingRelease(readStream);
 		_outputStream = CFBridgingRelease(writeStream);
 		
