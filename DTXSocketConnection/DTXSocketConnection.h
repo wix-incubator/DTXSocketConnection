@@ -40,7 +40,7 @@ NS_ASSUME_NONNULL_BEGIN
 /**
  * Creates a bidirectional TCP/IP connection using the provided input and output streams.
  *
- * After you create the connection, you must start it by calling its @open method.
+ * After you create the connection, you must start it by calling its @c open method.
  *
  * @note The streams provided must not be opened.
  *
@@ -48,21 +48,24 @@ NS_ASSUME_NONNULL_BEGIN
  *
  * @param outputStream The output stream.
  *
- * @param queue A queue for scheduling the delegate calls and completion handlers. The queue must be a serial queue, in order to ensure the correct ordering of callbacks. If nil, the session creates a serial queue for performing all delegate method calls and completion handler calls.
+ * @param delegateQueue A queue for scheduling the delegate calls and completion handlers. The queue must be a serial queue, in order to ensure the correct ordering of callbacks. If @c nil, the session creates a serial queue for performing all delegate method calls and completion handler calls.
  */
-- (instancetype)initWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream queue:(nullable dispatch_queue_t)queue;
+- (instancetype)initWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream delegateQueue:(nullable dispatch_queue_t)delegateQueue NS_DESIGNATED_INITIALIZER;
 /**
  * Creates a bidirectional TCP/IP connection to a specified hostname and port.
  *
- * After you create the connection, you must start it by calling its @open method.
+ * After you create the connection, you must start it by calling its @c open method.
  *
  * @param hostName The hostname of the connection endpoint.
  *
  * @param port The hostname of the connection endpoint.
  *
- * @param queue A queue for scheduling the delegate calls and completion handlers. The queue must be a serial queue, in order to ensure the correct ordering of callbacks. If nil, the session creates a serial queue for performing all delegate method calls and completion handler calls.
+ * @param delegateQueue A queue for scheduling the delegate calls and completion handlers. The queue must be a serial queue, in order to ensure the correct ordering of callbacks. If @c nil, the session creates a serial queue for performing all delegate method calls and completion handler calls.
  */
-- (instancetype)initWithHostName:(NSString*)hostName port:(NSInteger)port queue:(nullable dispatch_queue_t)queue;
+- (instancetype)initWithHostName:(NSString*)hostName port:(NSInteger)port delegateQueue:(nullable dispatch_queue_t)delegateQueue NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
++ (instancetype)new NS_UNAVAILABLE;
 
 /**
  * The queue provided when this object was created.
@@ -71,7 +74,7 @@ NS_ASSUME_NONNULL_BEGIN
  *
  * @note This queue must be set at object creation time and may not be changed.
  */
-@property (nonatomic, strong, readonly) dispatch_queue_t workQueue;
+@property (nonatomic, strong, readonly) dispatch_queue_t delegateQueue;
 
 /**
  * The connection delegate.
@@ -96,11 +99,57 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)closeWrite;
 
 /**
- * Asynchronously reads data from the stream, and calls a handler upon completion.
+ * Sends a message.
  *
- * @param completionHandler The completion handler to call when data is read, or an error occurs. This handler is executed on the work queue.
+ * If an error occurs, any outstanding work will also fail.
+ *
+ * Note that invocation of the completion handler does not guarantee that the remote side has received all the bytes, only that they have been written to the kernel.
+ *
+ * @param message The message to be sent.
+ * @param completionHandler A block that receives an NSError that indicates an error encountered while sending, or @c nil if no error occurred. This block is executed on the work queue.
  */
-- (void)readDataWithCompletionHandler:(void (^ __nonnull)(NSData* __nullable data, NSError* __nullable error))completionHandler;
+- (void)sendMessage:(NSData*)message completionHandler:(void (^)(NSError* __nullable error))completionHandler NS_SWIFT_NAME(send(_:completionHandler:));
+
+/**
+ * Reads a message once all the frames of the message are available.
+ *
+ * If an error occurs, any outstanding work will also fail.
+ *
+ * @param completionHandler A block that receives two parameters: the message, and an NSError that indicates an error encountered while receiving the message. The error is @c nil if no error occurred. This handler is executed on the work queue.
+ */
+- (void)receiveMessageWithCompletionHandler:(void (^)(NSData* __nullable message, NSError* __nullable error))completionHandler NS_SWIFT_NAME(receive(completionHandler:));
+
+@end
+
+@interface DTXSocketConnection (Deprecated)
+
+/**
+ * Creates a bidirectional TCP/IP connection using the provided input and output streams.
+ *
+ * After you create the connection, you must start it by calling its @c open method.
+ *
+ * @note The streams provided must not be opened.
+ *
+ * @param inputStream The input stream.
+ *
+ * @param outputStream The output stream.
+ *
+ * @param queue A queue for scheduling the delegate calls and completion handlers. The queue must be a serial queue, in order to ensure the correct ordering of callbacks. If @c nil, the session creates a serial queue for performing all delegate method calls and completion handler calls.
+ */
+- (instancetype)initWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream queue:(nullable dispatch_queue_t)queue DEPRECATED_MSG_ATTRIBUTE("Use initWithInputStream:outputStream:delegateQueue: instead.");
+/**
+ * Creates a bidirectional TCP/IP connection to a specified hostname and port.
+ *
+ * After you create the connection, you must start it by calling its @c open method.
+ *
+ * @param hostName The hostname of the connection endpoint.
+ *
+ * @param port The hostname of the connection endpoint.
+ *
+ * @param queue A queue for scheduling the delegate calls and completion handlers. The queue must be a serial queue, in order to ensure the correct ordering of callbacks. If @c nil, the session creates a serial queue for performing all delegate method calls and completion handler calls.
+ */
+- (instancetype)initWithHostName:(NSString*)hostName port:(NSInteger)port queue:(nullable dispatch_queue_t)queue DEPRECATED_MSG_ATTRIBUTE("Use initWithHostName:port:delegateQueue: instead.");
+
 /**
  * Asynchronously writes the specified data to the stream, and calls a handler upon completion.
  *
@@ -109,7 +158,14 @@ NS_ASSUME_NONNULL_BEGIN
  * @param data The data to be written.
  * @param completionHandler The completion handler to call when all bytes are written, or an error occurs. This handler is executed on the work queue.
  */
-- (void)writeData:(NSData*)data completionHandler:(void (^ __nonnull)(NSError* __nullable error))completionHandler;
+- (void)writeData:(NSData*)data completionHandler:(void (^ __nonnull)(NSError* __nullable error))completionHandler NS_SWIFT_NAME(write(_:completionHandler:)) DEPRECATED_MSG_ATTRIBUTE("Use sendMessage:completionHandler: instead.");
+
+/**
+ * Asynchronously reads data from the stream, and calls a handler upon completion.
+ *
+ * @param completionHandler The completion handler to call when data is read, or an error occurs. This handler is executed on the work queue.
+ */
+- (void)readDataWithCompletionHandler:(void (^ __nonnull)(NSData* __nullable data, NSError* __nullable error))completionHandler NS_SWIFT_NAME(read(completionHandler:)) DEPRECATED_MSG_ATTRIBUTE("Use receiveMessageWithCompletionHandler: instead.");
 
 @end
 

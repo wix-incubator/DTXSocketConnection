@@ -8,14 +8,22 @@
 
 #import "DTXSocketConnection.h"
 
+#if ! defined(__cplusplus) && ! defined(auto)
+#define auto __auto_type
+#endif
+
 @interface DTXSocketConnection () <NSStreamDelegate>
 
 @end
 
+#if defined(__IPHONE_14_0) || defined(__MAC_10_16) || defined(__TVOS_14_0) || defined(__WATCHOS_7_0)
+__attribute__((objc_direct_members))
+#endif
 @implementation DTXSocketConnection
 {
 	NSInputStream* _inputStream;
 	NSOutputStream* _outputStream;
+	dispatch_queue_t _workQueue;
 	
 	BOOL _inputWaitingForHeader;
 	BOOL _inputWaitingForData;
@@ -35,7 +43,13 @@
 	NSMutableArray<void (^)(NSError *error)>* _pendingWrites;
 }
 
-- (instancetype)initWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream queue:(nullable dispatch_queue_t)queue
+- (void)_setupQueuesWithDelegateQueue:(dispatch_queue_t)delegateQueue
+{
+	_workQueue = dispatch_queue_create("com.wix.DTXSocketConnectionQueue", dispatch_queue_attr_make_with_autorelease_frequency(DISPATCH_QUEUE_SERIAL, DISPATCH_AUTORELEASE_FREQUENCY_WORK_ITEM));
+	_delegateQueue = delegateQueue ?: _workQueue;
+}
+
+- (instancetype)initWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream delegateQueue:(nullable dispatch_queue_t)delegateQueue
 {
 	NSAssert(inputStream != nil && outputStream != nil, @"Streams must not be nil.");
 	NSAssert(inputStream.streamStatus == NSStreamStatusNotOpen && outputStream.streamStatus == NSStreamStatusNotOpen, @"Streams must not be opened.");
@@ -44,7 +58,7 @@
 	
 	if(self)
 	{
-		_workQueue = queue ?: dispatch_queue_create("com.wix.DTXSocketConnectionQueue", dispatch_queue_attr_make_with_autorelease_frequency(DISPATCH_QUEUE_SERIAL, DISPATCH_AUTORELEASE_FREQUENCY_WORK_ITEM));
+		[self _setupQueuesWithDelegateQueue:delegateQueue];
 		_inputStream = inputStream;
 		_outputStream = outputStream;
 		
@@ -54,9 +68,10 @@
 	return self;
 }
 
-- (instancetype)initWithHostName:(NSString*)hostName port:(NSInteger)port queue:(nullable dispatch_queue_t)queue
+- (instancetype)initWithHostName:(NSString*)hostName port:(NSInteger)port delegateQueue:(nullable dispatch_queue_t)delegateQueue
 {
 	NSAssert(hostName != nil, @"Host name must not be nil.");
+	NSAssert(port > 0, @"Invalid port number %@", @(port));
 	
 	self = [super init];
 	
@@ -66,14 +81,30 @@
 		CFWriteStreamRef writeStream;
 		CFStreamCreatePairWithSocketToHost(NULL, (__bridge CFStringRef)hostName, (UInt32)port, &readStream, &writeStream);
 		
-		_workQueue = queue ?: dispatch_queue_create("com.wix.DTXSocketConnectionQueue", dispatch_queue_attr_make_with_autorelease_frequency(DISPATCH_QUEUE_SERIAL, DISPATCH_AUTORELEASE_FREQUENCY_WORK_ITEM));
+		[self _setupQueuesWithDelegateQueue:delegateQueue];
 		_inputStream = CFBridgingRelease(readStream);
 		_outputStream = CFBridgingRelease(writeStream);
 		
 		[self _commonInit];
+		
+		
 	}
 	
 	return self;
+}
+
+- (instancetype)init
+{
+	[self doesNotRecognizeSelector:_cmd];
+	
+	return nil;
+}
+
++ (instancetype)new
+{
+	[self doesNotRecognizeSelector:_cmd];
+	
+	return nil;
 }
 
 - (void)_commonInit
@@ -200,7 +231,9 @@
 	
 	void (^pendingTask)(NSData *data, NSError *error) = _pendingReads.firstObject;
 	
-	pendingTask(dataForUser, nil);
+	dispatch_async(_delegateQueue, ^{
+		pendingTask(dataForUser, nil);
+	});
 	
 	[_pendingReads removeObjectAtIndex:0];
 	
@@ -227,25 +260,36 @@
 {
 	if(_inputStream.streamStatus == NSStreamStatusClosed || _inputPendingClose)
 	{
-		request(nil, [NSError errorWithDomain:@"DTXSocketConnectionErrorDomain" code:10 userInfo:@{NSLocalizedDescriptionKey: @"Reading is closed."}]);
+		dispatch_async(_delegateQueue, ^{
+			request(nil, [NSError errorWithDomain:@"DTXSocketConnectionErrorDomain" code:10 userInfo:@{NSLocalizedDescriptionKey: @"Reading is closed."}]);
+		});
 		return;
 	}
 	
 	if(_inputStream.streamStatus == NSStreamStatusError)
 	{
-		request(nil, _inputStream.streamError);
+		NSError* error = _inputStream.streamError;
+		dispatch_async(_delegateQueue, ^{
+			request(nil, error);
+		});
 		return;
 	}
 }
 
 - (void)_errorOutAllPendingReadRequests
 {
-	[_pendingReads enumerateObjectsUsingBlock:^(void (^ _Nonnull obj)(NSData *, NSError *), NSUInteger idx, BOOL * _Nonnull stop) {
+	for (void (^obj)(NSData *, NSError *) in _pendingReads)
+	{
 		[self _errorOutForReadRequest:obj];
-	}];
+	}
 }
 
-- (void)readDataWithCompletionHandler:(void (^ _Nonnull)(NSData *data, NSError *error))completionHandler
+- (void)receiveMessageWithCompletionHandler:(void (^)(NSData* _Nullable, NSError * _Nullable))completionHandler
+{
+	[self _readDataWithCompletionHandler:completionHandler];
+}
+
+- (void)_readDataWithCompletionHandler:(void (^ _Nonnull)(NSData *data, NSError *error))completionHandler
 {
 	if(completionHandler == nil)
 	{
@@ -343,7 +387,9 @@
 	
 	void (^pendingTask)(NSError *error) = _pendingWrites.firstObject;
 	
-	pendingTask(nil);
+	dispatch_async(_delegateQueue, ^{
+		pendingTask(nil);
+	});
 	
 	[_pendingWrites removeObjectAtIndex:0];
 	
@@ -370,22 +416,28 @@
 {
 	if(_outputStream.streamStatus == NSStreamStatusClosed || _outputPendingClose)
 	{
-		request([NSError errorWithDomain:@"DTXSocketConnectionErrorDomain" code:10 userInfo:@{NSLocalizedDescriptionKey: @"Writing is closed."}]);
+		dispatch_async(_delegateQueue, ^{
+			request([NSError errorWithDomain:@"DTXSocketConnectionErrorDomain" code:10 userInfo:@{NSLocalizedDescriptionKey: @"Writing is closed."}]);
+		});
 		return;
 	}
 	
 	if(_outputStream.streamStatus == NSStreamStatusError)
 	{
-		request(_outputStream.streamError);
+		NSError* error = _outputStream.streamError;
+		dispatch_async(_delegateQueue, ^{
+			request(error);
+		});
 		return;
 	}
 }
 
 - (void)_errorOutAllPendingWriteRequests
 {
-	[_pendingWrites enumerateObjectsUsingBlock:^(void (^ _Nonnull obj)(NSError *), NSUInteger idx, BOOL * _Nonnull stop) {
+	for (void (^obj)(NSError *) in _pendingWrites)
+	{
 		[self _errorOutForWriteRequest:obj];
-	}];
+	}
 }
 
 - (void)_writeDataNow:(NSData*)data completionHandler:(void(^)(NSError* _Nullable))completionHandler
@@ -425,7 +477,12 @@
 	}
 }
 
-- (void)writeData:(NSData *)data completionHandler:(void (^ _Nonnull)(NSError * _Nullable))completionHandler
+- (void)sendMessage:(NSData*)message completionHandler:(void (^)(NSError * _Nullable))completionHandler
+{
+	[self _writeData:message completionHandler:completionHandler];
+}
+
+- (void)_writeData:(NSData *)data completionHandler:(void (^ _Nonnull)(NSError * _Nullable))completionHandler
 {
 	if(data == nil)
 	{
@@ -469,12 +526,15 @@
 				break;
 			case NSStreamEventErrorOccurred:
 			case NSStreamEventEndEncountered:
+			{
 				[self _errorOutAllPendingReadRequests];
-				if([self.delegate respondsToSelector:@selector(readClosedForSocketConnection:)])
-				{
-					[self.delegate readClosedForSocketConnection:self];
-				}
-				break;
+				dispatch_async(_delegateQueue, ^{
+					if([self.delegate respondsToSelector:@selector(readClosedForSocketConnection:)])
+					{
+						[self.delegate readClosedForSocketConnection:self];
+					}
+				});
+			}	break;
 			default:
 				break;
 		}
@@ -500,12 +560,15 @@
 				break;
 			case NSStreamEventErrorOccurred:
 			case NSStreamEventEndEncountered:
+			{
 				[self _errorOutAllPendingWriteRequests];
-				if([self.delegate respondsToSelector:@selector(writeClosedForSocketConnection:)])
-				{
-					[self.delegate writeClosedForSocketConnection:self];
-				}
-				break;
+				dispatch_async(_delegateQueue, ^{
+					if([self.delegate respondsToSelector:@selector(writeClosedForSocketConnection:)])
+					{
+						[self.delegate writeClosedForSocketConnection:self];
+					}
+				});
+			}	break;
 			default:
 				break;
 		}
@@ -546,6 +609,30 @@
 	
 	_inputStream = nil;
 	_outputStream = nil;
+}
+
+@end
+
+@implementation DTXSocketConnection (Deprecated)
+
+- (instancetype)initWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream queue:(nullable dispatch_queue_t)queue
+{
+	return [self initWithInputStream:inputStream outputStream:outputStream delegateQueue:queue];
+}
+
+- (instancetype)initWithHostName:(NSString*)hostName port:(NSInteger)port queue:(nullable dispatch_queue_t)queue
+{
+	return [self initWithHostName:hostName port:port delegateQueue:queue];
+}
+
+- (void)writeData:(NSData *)data completionHandler:(void (^ _Nonnull)(NSError * _Nullable))completionHandler
+{
+	[self _writeData:data completionHandler:completionHandler];
+}
+
+- (void)readDataWithCompletionHandler:(void (^)(NSData * _Nullable, NSError * _Nullable))completionHandler
+{
+	[self _readDataWithCompletionHandler:completionHandler];
 }
 
 @end
