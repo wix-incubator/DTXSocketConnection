@@ -14,7 +14,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		393CB0D924C4C3A300BDBDA9 /* DTXSocketConnectionStatic.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = DTXSocketConnectionStatic.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		393CB0D924C4C3A300BDBDA9 /* DTXSocketConnection.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = DTXSocketConnection.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		39498C2F1F1F84960030B620 /* DTXSocketConnection.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = DTXSocketConnection.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		39498C331F1F84960030B620 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		39498C3A1F1F84BC0030B620 /* DTXSocketConnection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DTXSocketConnection.h; sourceTree = "<group>"; };
@@ -51,7 +51,7 @@
 			isa = PBXGroup;
 			children = (
 				39498C2F1F1F84960030B620 /* DTXSocketConnection.framework */,
-				393CB0D924C4C3A300BDBDA9 /* DTXSocketConnectionStatic.framework */,
+				393CB0D924C4C3A300BDBDA9 /* DTXSocketConnection.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -103,7 +103,7 @@
 			);
 			name = DTXSocketConnectionStatic;
 			productName = DTXSocketConnection;
-			productReference = 393CB0D924C4C3A300BDBDA9 /* DTXSocketConnectionStatic.framework */;
+			productReference = 393CB0D924C4C3A300BDBDA9 /* DTXSocketConnection.framework */;
 			productType = "com.apple.product-type.framework";
 		};
 		39498C2E1F1F84960030B620 /* DTXSocketConnection */ = {
@@ -212,7 +212,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wix.DTXSocketConnection;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = DTXSocketConnection;
+				PRODUCT_NAME = DTXSocketConnection;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator watchos watchsimulator appletvos appletvsimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -239,7 +240,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wix.DTXSocketConnection;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = DTXSocketConnection;
+				PRODUCT_NAME = DTXSocketConnection;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator watchos watchsimulator appletvos appletvsimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
